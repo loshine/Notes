@@ -1,0 +1,132 @@
+# equals(), hashCode() 和 ==
+
+## 基本类型和引用类型
+
+在 java 中，数据的类型的分为两种，**基本数据类型**（八种）和**引用数据类型**（三种）。
+
+## == 的作用
+
+== 是一个运算符，用于比较两个数据是否相等。这里需要提一下，数据的存储方式，不管是引用类型数据还是基本类型数据，都是以二进制码存储在内存中的，当我们需要存储数据的时候，内存会开辟一块内存空间给我们使用。因此，存在一个数值和地址的编号。
+
+* 比较的是基本数据类型的时候，比较的是他们的数值是否相等。
+* 比较的是引用数据类型的时候，比较的他们存值的地址是否相等。
+
+## equals() 方法
+
+Object 类中定义了`equals()`方法：
+
+```java
+public boolean equals(Object obj) {
+    return (this == obj);
+}
+```
+
+默认情况下所有类的`equals()`方法其实都是调用了`==`进行比较，但大多数清空下我们调用`equals()`方法都是为了判断两个对象业务上是否相等，而非比较其存值地址。
+
+因此我们可以重写`equals()`方法，判断类的属性一致的时候返回`true`。
+
+## hashCode()
+
+Java 中所有的类都继承自 Object 类，Object 类中有个返回 hashCode 的本地方法。
+
+```java
+public native int hashCode();
+```
+
+该方法的作用是给一个对象返回一个 hashCode 值，这个值在 hash table 的数据结构中有重要的作用。例如，确定放置在 hash table 哪个索引位置，hash 冲突的频率。
+
+要求：
+
+* 同一个 Java 对象，在程序运行的整个生命周期中。该对象返回的 hashCode 应该相同。
+* 使用`equals`方法，判断为两个相等的对象，其返回的 hashCode 应该相同。
+* 使用`equals`方法，判断为两个不相同的对象，其返回的 hashCode 应该不相同。
+
+通常的 hashCode 生成方法是将对象的内存地址转换成一个整型数，这样就能为不同的对象返回一个不一样的 hashCode。但是这种方法不能满足上面的第二个条件，所以这种实现也不是 Java 语言所必须的实现方法。
+
+### String 的 hashCode 方法
+
+String 类实现了 hashCode 方法
+
+```java
+/** Cache the hash code for the string */
+private int hash; // Default to 0
+
+public int hashCode() {
+    int h = hash;
+    if (h == 0 && value.length > 0) {
+        char val[] = value;
+
+        for (int i = 0; i < value.length; i++) {
+            h = 31 * h + val[i];
+        }
+        hash = h;
+    }
+    return h;
+}
+```
+
+在 String 中计算的 hashCode 会存储在 hash 变量中，并且只会计算一次。因为 String 是 final 的，并且一个 String 对象被初始化后无法修改，所以它的 hashCode 不会变化。
+
+for 循环计算 hashCode 的方法是根据以下式子：`s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]`。
+
+### IntelliJ 生成 hashCode()
+
+编写一个类 Student，拥有姓名 name 和年龄 age 两个属性，使用模板生成`equals()`和`hashCode()`方法：
+
+```java
+public class Student {
+    public String name;
+    public int age;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Student student = (Student) o;
+        return age == student.age &&
+                Objects.equals(name, student.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, age);
+    }
+}
+```
+
+可以看出自动生成的`hashCode()`方法调用了 Objects 类的`hash(Object... values)`方法。
+
+查看 Objects 类的该方法：
+
+```java
+public static int hash(Object... values) {
+    return Arrays.hashCode(values);
+}
+```
+
+最终调用了 Arrays 类的 hashCode 方法，查看其实现：
+
+```java
+public static int hashCode(Object a[]) {
+    if (a == null)
+        return 0;
+
+    int result = 1;
+
+    for (Object element : a)
+        result = 31 * result + (element == null ? 0 : element.hashCode());
+
+    return result;
+}
+```
+
+其计算方式与 String 类基本一致，也是如下式：`属性1*31^(n-1) + 属性2*31^(n-2) + ... + 属性n`。
+
+### 使用 31 的原因
+
+31 是一个质数（Prime number），质数也称为素数。质数是大于 1 的自然数，且只能被 1 和其本身整除。
+
+选择 31 的原因大概有以下几点：
+
+* 一个数乘质数后的结果，只能被 1 、质数、乘数还有结果本身整除。计算 hashCode 选择一个优质质数可以降低 hash 的冲突率。
+* 31 （2 << 5 - 1），在计算的过程中可以被 JVM 优化。
