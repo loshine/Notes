@@ -4,5 +4,12 @@
 
 ## Java
 
-* [001-四种引用](java/001-si-zhong-yin-yong.md)
+* [001-四种引用](notes/Java/001-四种引用.md)
 
+## 数据结构
+
+## 网络
+
+## Android
+
+## Flutter
