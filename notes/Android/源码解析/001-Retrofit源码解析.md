@@ -238,4 +238,76 @@ abstract class ServiceMethod<T> {
 
 `ServiceMethod.parseAnnotations`中主要调用了`RequestFactory.parseAnnotations`解析代理类方法的与请求相关的注解，使用`RequestFactory.Builder`的建造者模式构建 RequestFactory。该类源码较长此处不展开了，具体可以参照其[源码](https://github.com/square/retrofit/blob/master/retrofit/src/main/java/retrofit2/RequestFactory.java)。
 
-`HttpServiceMethod.parseAnnotations`
+`HttpServiceMethod.parseAnnotations`方法中忽略处理 Kotlin 逻辑的代码，可以简化如下：
+
+```java
+static <ResponseT, ReturnT> HttpServiceMethod<ResponseT, ReturnT> parseAnnotations(
+      Retrofit retrofit, Method method, RequestFactory requestFactory) {
+    boolean isKotlinSuspendFunction = requestFactory.isKotlinSuspendFunction;
+    boolean continuationWantsResponse = false;
+    boolean continuationBodyNullable = false;
+
+    Annotation[] annotations = method.getAnnotations();
+    Type adapterType;
+    if (isKotlinSuspendFunction) {
+      // Kotlin suspend 函数对应逻辑
+			// ...
+    } else {
+      adapterType = method.getGenericReturnType();
+    }
+
+    CallAdapter<ResponseT, ReturnT> callAdapter =
+        createCallAdapter(retrofit, method, adapterType, annotations);
+    Type responseType = callAdapter.responseType();
+    if (responseType == okhttp3.Response.class) {
+      throw methodError(method, "'"
+          + getRawType(responseType).getName()
+          + "' is not a valid response body type. Did you mean ResponseBody?");
+    }
+    if (responseType == Response.class) {
+      throw methodError(method, "Response must include generic type (e.g., Response<String>)");
+    }
+    // TODO support Unit for Kotlin?
+    if (requestFactory.httpMethod.equals("HEAD") && !Void.class.equals(responseType)) {
+      throw methodError(method, "HEAD method must use Void as response type.");
+    }
+
+    Converter<ResponseBody, ResponseT> responseConverter =
+        createResponseConverter(retrofit, method, responseType);
+
+    okhttp3.Call.Factory callFactory = retrofit.callFactory;
+    if (!isKotlinSuspendFunction) {
+      // Java 最终走到这里
+      return new CallAdapted<>(requestFactory, callFactory, responseConverter, callAdapter);
+    } else if (continuationWantsResponse) {
+      // 这里是 Kotlin 对应逻辑
+      return (HttpServiceMethod<ResponseT, ReturnT>) new SuspendForResponse<>(requestFactory,
+          callFactory, responseConverter, (CallAdapter<ResponseT, Call<ResponseT>>) callAdapter);
+    } else {
+      // 这里是 Kotlin 对应逻辑
+      return (HttpServiceMethod<ResponseT, ReturnT>) new SuspendForBody<>(requestFactory,
+          callFactory, responseConverter, (CallAdapter<ResponseT, Call<ResponseT>>) callAdapter,
+          continuationBodyNullable);
+    }
+  }
+```
+
+上述代码检查返回类型合法性，获取了 Retrofit 实例中的 CallAdapter.Factory 通过 get 方法创建的 CallAdapter 以及 Retrofit 实例中的 Call.Factory，然后构造了一个 CallAdapted 并返回。
+
+### 2.3 调用接口方法
+
+当我们创建完毕接口实例，调用接口方法时，最终调用了该 CallAdapted 的`invoke`方法：
+
+```java
+  @Override final @Nullable ReturnT invoke(Object[] args) {
+    Call<ResponseT> call = new OkHttpCall<>(requestFactory, args, callFactory, responseConverter);
+    return adapt(call, args);
+  }
+
+    @Override protected ReturnT adapt(Call<ResponseT> call, Object[] args) {
+      return callAdapter.adapt(call);
+    }
+```
+
+当没有设定特殊的 callAdapter 时，会调用`platform.defaultCallAdapterFactories(callbackExecutor)`
+
