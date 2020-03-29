@@ -26,28 +26,23 @@
 
 ## Android
 
-### 绘制
-
-* [001-View测量](notes/Android/绘制/001-View测量.md)
-* [002-View绘制顺序](notes/Android/绘制/002-View绘制顺序.md)
-* [003-Paint绘制效果](notes/Android/绘制/003-Paint绘制效果.md)
-* [004-Canvas绘制图形](notes/Android/绘制/004-Canvas绘制图形.md)
-* [005-Canvas绘制颜色](notes/Android/绘制/005-Canvas绘制颜色.md)
-* [006-Canvas绘制文字](notes/Android/绘制/006-Canvas绘制文字.md)
-* [007-Canvas变换](notes/Android/绘制/007-Canvas变换.md)
-
-### 动画
-
-* [001-补间动画](notes/Android/动画/001-补间动画.md)
-* [002-布局动画](notes/Android/动画/002-布局动画.md)
-* [003-帧动画](notes/Android/动画/003-帧动画.md)
-* [004-属性动画](notes/Android/动画/004-属性动画.md)
-* [005-插值器](notes/Android/动画/005-插值器.md)
-* [006-TypeEvaluator](notes/Android/动画/006-TypeEvaluator.md)
-
-### 消息机制
-
-* [001-Handler](notes/Android/消息机制/001-Handler.md)
-* [002-Looper](notes/Android/消息机制/002-Looper.md)
+* [000-绘制](notes/Android/绘制/000-index.md)
+    * [001-View测量](notes/Android/绘制/001-View测量.md)
+    * [002-View绘制顺序](notes/Android/绘制/002-View绘制顺序.md)
+    * [003-Paint绘制效果](notes/Android/绘制/003-Paint绘制效果.md)
+    * [004-Canvas绘制图形](notes/Android/绘制/004-Canvas绘制图形.md)
+    * [005-Canvas绘制颜色](notes/Android/绘制/005-Canvas绘制颜色.md)
+    * [006-Canvas绘制文字](notes/Android/绘制/006-Canvas绘制文字.md)
+    * [007-Canvas变换](notes/Android/绘制/007-Canvas变换.md)
+* [000-动画](notes/Android/动画/000-index.md)
+    * [001-补间动画](notes/Android/动画/001-补间动画.md)
+    * [002-布局动画](notes/Android/动画/002-布局动画.md)
+    * [003-帧动画](notes/Android/动画/003-帧动画.md)
+    * [004-属性动画](notes/Android/动画/004-属性动画.md)
+    * [005-插值器](notes/Android/动画/005-插值器.md)
+    * [006-TypeEvaluator](notes/Android/动画/006-TypeEvaluator.md)
+* [000-消息机制](notes/Android/消息机制/000-index.md)
+    * [001-Handler](notes/Android/消息机制/001-Handler.md)
+    * [002-Looper](notes/Android/消息机制/002-Looper.md)
 
 ## Flutter
