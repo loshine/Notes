@@ -6,7 +6,7 @@
 
 * [001-四种引用](notes/Java/001-四种引用.md)
 * [002-内存模型](notes/Java/002-内存模型.md)
-* [003-equals(), hashCode() 和 ==](notes/Java/003-equals(), hashCode() 和 ==.md)
+* [003-哈希与相等](notes/Java/003-哈希与相等.md)
 * [004-集合类](notes/Java/004-集合类.md)
 * [005-ArrayList源码解析](notes/Java/005-ArrayList源码解析.md)
 * [006-LinkedList源码解析](notes/Java/006-LinkedList源码解析.md)
