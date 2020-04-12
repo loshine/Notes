@@ -31,7 +31,7 @@ public static void main(String[] args) {
 public static void prepareMainLooper() {
    // 调用Looper的prepare()方法创建Looper
    prepare(false);
- ...
+ 	...
 }
 ```
 
@@ -54,7 +54,7 @@ private static void prepare(boolean quitAllowed) {
 }
 ```
 
-在线程中我们可以调用`Looper.prepare`，这个函数中`sThreadLocal.set()`中创建一个 Looper，该方法不仅创建了 Looper，其实也创建了 MessageQueue, 以及将 Looper 将当前线程和 Looper 关联起来了。我们看一看 Looper 的构造就明白了
+在线程中我们可以调用`Looper.prepare`，这个函数中`sThreadLocal.set()`中创建一个 Looper，该方法不仅创建了 Looper，其实也创建了 MessageQueue, 以及将当前线程和 Looper 关联起来了。我们看一看 Looper 的构造就明白了
 
 ```java
 private Looper(boolean quitAllowed) {

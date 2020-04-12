@@ -36,7 +36,7 @@ public final boolean sendMessageDelayed(Message msg, long delayMillis) {
     return sendMessageAtTime(msg, SystemClock.uptimeMillis() + delayMillis);
 }
 ...
-    
+
 public boolean sendMessageAtTime(Message msg, long uptimeMillis) {
     // 这里出现了我们经常提起的消息队列类MessageQueue
     MessageQueue queue = mQueue;

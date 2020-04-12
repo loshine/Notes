@@ -296,7 +296,7 @@ static <ResponseT, ReturnT> HttpServiceMethod<ResponseT, ReturnT> parseAnnotatio
 
 ### 2.3 调用接口方法
 
-当我们创建完毕接口实例，调用接口方法时，最终调用了该 CallAdapted 的`invoke`方法：
+当我们创建完毕接口实例，调用接口方法时，是调用了 HttpMethodService 的`invoke`方法：
 
 ```java
   @Override final @Nullable ReturnT invoke(Object[] args) {
@@ -304,10 +304,224 @@ static <ResponseT, ReturnT> HttpServiceMethod<ResponseT, ReturnT> parseAnnotatio
     return adapt(call, args);
   }
 
+		// CallAdapted 的实现
     @Override protected ReturnT adapt(Call<ResponseT> call, Object[] args) {
       return callAdapter.adapt(call);
     }
 ```
 
-当没有设定特殊的 callAdapter 时，会调用`platform.defaultCallAdapterFactories(callbackExecutor)`
+当没有设定特殊的 callAdapter 时，Retrofit.Builder 的`build()`方法中是这样的：
 
+```java
+    Builder(Retrofit retrofit) {
+      platform = Platform.get();
+      // 省略其它部分
+    }
+
+    public Retrofit build() {
+			// 省略无关代码
+			Executor callbackExecutor = this.callbackExecutor;
+      if (callbackExecutor == null) {
+        callbackExecutor = platform.defaultCallbackExecutor();
+      }
+
+			List<CallAdapter.Factory> callAdapterFactories = new ArrayList<>(this.callAdapterFactories);
+      callAdapterFactories.addAll(platform.defaultCallAdapterFactories(callbackExecutor));
+
+      return new Retrofit(callFactory, baseUrl, unmodifiableList(converterFactories),
+          unmodifiableList(callAdapterFactories), callbackExecutor, validateEagerly);
+    }
+```
+
+而追踪 HttpServiceMethod 中的 callAdapter 的来源，最终发现其是从 retrofit 实例中的 callAdapterFactories 获取的，我们再查看 Platform 相关代码：
+
+```java
+class Platform {
+  private static final Platform PLATFORM = findPlatform();
+
+  static Platform get() {
+    return PLATFORM;
+  }
+
+  private static Platform findPlatform() {
+    try {
+      Class.forName("android.os.Build");
+      if (Build.VERSION.SDK_INT != 0) {
+        return new Android();
+      }
+    } catch (ClassNotFoundException ignored) {
+    }
+    try {
+      Class.forName("java.util.Optional");
+      return new Java8();
+    } catch (ClassNotFoundException ignored) {
+    }
+    return new Platform();
+  }
+}
+```
+
+可以发现在 Android 上 Platform 的 get 方法返回了一个 Android 实例。
+
+再看 Android 类的相关方法：
+
+```java
+    @Override public Executor defaultCallbackExecutor() {
+      return new MainThreadExecutor();
+    }
+
+    @Override List<? extends CallAdapter.Factory> defaultCallAdapterFactories(
+        @Nullable Executor callbackExecutor) {
+      if (callbackExecutor == null) throw new AssertionError();
+      DefaultCallAdapterFactory executorFactory = new DefaultCallAdapterFactory(callbackExecutor);
+      return Build.VERSION.SDK_INT >= 24
+        ? asList(CompletableFutureCallAdapterFactory.INSTANCE, executorFactory)
+        : singletonList(executorFactory);
+    }
+
+    static class MainThreadExecutor implements Executor {
+      private final Handler handler = new Handler(Looper.getMainLooper());
+
+      @Override public void execute(Runnable r) {
+        handler.post(r);
+      }
+    }
+```
+
+代码非常简单，defaultCallbackExecutor 获取了一个 MainThreadExecutor，该 Executor 会把操作发送给 handler 的 post 方法，让回调在 Android 主线程进行。defaultCallAdapterFactories 方法根据版本返回不同的 List，如果不考虑 定义接口时返回参数定义为 Future，那么只看 DefaultCallAdapterFactory 就可以了。
+
+而 DefaultCallAdapterFactory 的 get 方法里实现了一个 CallAdapter 的匿名内部类：
+
+```java
+    @Nullable
+    public CallAdapter<?, ?> get(Type returnType, Annotation[] annotations, Retrofit retrofit) {
+        if (getRawType(returnType) != Call.class) {
+            return null;
+        } else if (!(returnType instanceof ParameterizedType)) {
+            throw new IllegalArgumentException("Call return type must be parameterized as Call<Foo> or Call<? extends Foo>");
+        } else {
+            final Type responseType = Utils.getParameterUpperBound(0, (ParameterizedType)returnType);
+            final Executor executor = Utils.isAnnotationPresent(annotations, SkipCallbackExecutor.class) ? null : this.callbackExecutor;
+            return new CallAdapter<Object, Call<?>>() {
+                public Type responseType() {
+                    return responseType;
+                }
+
+                public Call<Object> adapt(Call<Object> call) {
+                    return (Call)(executor == null ? call : new DefaultCallAdapterFactory.ExecutorCallbackCall(executor, call));
+                }
+            };
+        }
+    }
+```
+
+我们使用 Call 的时候都是调用 enqueue 方法，我们看看 DefaultCallAdapterFactory.ExecutorCallbackCall 的实现：
+
+```java
+    static final class ExecutorCallbackCall<T> implements Call<T> {
+        final Executor callbackExecutor;
+        final Call<T> delegate;
+
+        ExecutorCallbackCall(Executor callbackExecutor, Call<T> delegate) {
+            this.callbackExecutor = callbackExecutor;
+            this.delegate = delegate;
+        }
+
+        public void enqueue(final Callback<T> callback) {
+            Utils.checkNotNull(callback, "callback == null");
+            this.delegate.enqueue(new Callback<T>() {
+                public void onResponse(Call<T> call, final Response<T> response) {
+                    ExecutorCallbackCall.this.callbackExecutor.execute(new Runnable() {
+                        public void run() {
+                            if (ExecutorCallbackCall.this.delegate.isCanceled()) {
+                                callback.onFailure(ExecutorCallbackCall.this, new IOException("Canceled"));
+                            } else {
+                                callback.onResponse(ExecutorCallbackCall.this, response);
+                            }
+
+                        }
+                    });
+                }
+
+                public void onFailure(Call<T> call, final Throwable t) {
+                    ExecutorCallbackCall.this.callbackExecutor.execute(new Runnable() {
+                        public void run() {
+                            callback.onFailure(ExecutorCallbackCall.this, t);
+                        }
+                    });
+                }
+            });
+        }
+    }
+```
+
+本质上是调用了 delegate 的 enqueue 方法，而 delegate 是在 HttpServiceMethod 里构造出的一个 OkHttpCall，其 enqueue 如下：
+
+```java
+  @Override public void enqueue(final Callback<T> callback) {
+    checkNotNull(callback, "callback == null");
+
+    okhttp3.Call call;
+    Throwable failure;
+
+    synchronized (this) {
+      if (executed) throw new IllegalStateException("Already executed.");
+      executed = true;
+
+      call = rawCall;
+      failure = creationFailure;
+      if (call == null && failure == null) {
+        try {
+          call = rawCall = createRawCall();
+        } catch (Throwable t) {
+          throwIfFatal(t);
+          failure = creationFailure = t;
+        }
+      }
+    }
+
+    if (failure != null) {
+      callback.onFailure(this, failure);
+      return;
+    }
+
+    if (canceled) {
+      call.cancel();
+    }
+
+    call.enqueue(new okhttp3.Callback() {
+      @Override public void onResponse(okhttp3.Call call, okhttp3.Response rawResponse) {
+        Response<T> response;
+        try {
+          response = parseResponse(rawResponse);
+        } catch (Throwable e) {
+          throwIfFatal(e);
+          callFailure(e);
+          return;
+        }
+
+        try {
+          callback.onResponse(OkHttpCall.this, response);
+        } catch (Throwable t) {
+          throwIfFatal(t);
+          t.printStackTrace(); // TODO this is not great
+        }
+      }
+
+      @Override public void onFailure(okhttp3.Call call, IOException e) {
+        callFailure(e);
+      }
+
+      private void callFailure(Throwable e) {
+        try {
+          callback.onFailure(OkHttpCall.this, e);
+        } catch (Throwable t) {
+          throwIfFatal(t);
+          t.printStackTrace(); // TODO this is not great
+        }
+      }
+    });
+  }
+```
+
+最终此处交由 okhttp3.Call 来入队进行网络请求，至此 Retrofit 的一次完整的请求结束。
